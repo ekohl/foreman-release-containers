@@ -1,0 +1,33 @@
+#!/bin/bash -e
+PROJECT=katello
+VERSION=nightly
+DIST=el8
+
+NAME=$PROJECT-$DIST-release
+VOLUME=$PROJECT-$VERSION-cache:/var/cache/dnf:Z
+
+if [[ -n $FORCE ]] || [[ -z $(podman images --quiet --filter reference=$NAME:$VERSION) ]] ; then
+	# TODO: el7
+	if [[ $DIST == el8 ]] ; then
+		FROM=centos:stream8
+	fi
+	container=$(buildah from $FROM)
+
+	buildah config --cmd /bin/bash $container
+	buildah config --volume /var/cache/dnf $container
+	buildah copy $container ./check-dependency /usr/local/bin/
+
+	buildah run $container -- dnf -y install https://yum.theforeman.org/releases/$VERSION/$DIST/x86_64/foreman-release.rpm
+	if [[ $PROJECT == foreman ]] ; then
+		buildah run $container -- dnf -y module enable foreman:$DIST
+	elif [[ $PROJECT == katello ]] ; then
+		# TODO: map versions
+		buildah run $container -- dnf -y install https://yum.theforeman.org/katello/$VERSION/katello/$DIST/x86_64/katello-repos-latest.rpm
+		buildah run $container -- dnf -y module enable katello:$DIST pulpcore:$DIST
+	fi
+
+	buildah run $container -- dnf -y clean all
+
+	buildah commit $container $NAME:$VERSION
+fi
+exec podman run --interactive --tty --rm --volume $VOLUME $NAME:$VERSION

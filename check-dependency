@@ -1,0 +1,10 @@
+#!/bin/bash
+
+CACHEONLY="${CACHEONLY:+--cacheonly}"
+
+for package in $* ; do
+        output=$(dnf repoquery $CACHEONLY --quiet --alldeps --whatrequires $package | grep -v ${package}-doc)
+        if [[ -z $output ]] ; then
+                echo "Unused package $package"
+        fi
+done
